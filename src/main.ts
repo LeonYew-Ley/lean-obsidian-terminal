@@ -77,7 +77,7 @@ export default class TerminalPlugin extends Plugin {
     });
 
     // Ribbon icon
-    this.ribbonEl = this.addRibbonIcon(this.settings.ribbonIcon, "Open terminal", () => {
+    this.ribbonEl = this.addRibbonIcon(this.settings.ribbonIcon, "Open Lean Terminal", () => {
       void this.activateTerminal();
     });
 
