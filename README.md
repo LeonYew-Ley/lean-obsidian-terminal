@@ -47,6 +47,7 @@ An embedded terminal panel for [Obsidian](https://obsidian.md), powered by [xter
 
 - In-terminal search bar (Ctrl+Alt+F): match counter, case-sensitive toggle, and highlight decorations
 - Copy on select: automatically copies selected text to the clipboard as you highlight
+- Terminal apps (such as Claude Code) can set the clipboard through OSC 52; this is write-only, so programs can never read your clipboard
 
 ### Appearance & Configuration
 
