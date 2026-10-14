@@ -5,8 +5,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { SerializeAddon } from "@xterm/addon-serialize";
 import { SearchAddon } from "@xterm/addon-search";
-import { ClipboardAddon } from "@xterm/addon-clipboard";
-import { createWriteOnlyClipboardProvider } from "./osc52-clipboard";
+import { registerOsc52 } from "./osc52-clipboard";
 import type { IDisposable } from "@xterm/xterm";
 import { PtyManager } from "./pty-manager";
 import { findPathCandidates, splitLineSuffix } from "./path-links";
@@ -575,13 +574,6 @@ export class TerminalTabManager {
     terminal.loadAddon(webLinksAddon);
     terminal.loadAddon(serializeAddon);
     terminal.loadAddon(searchAddon);
-    // OSC 52 (#103): let TUIs such as Claude Code set the system clipboard.
-    // Write-only: read queries are answered empty (see osc52-clipboard.ts).
-    terminal.loadAddon(
-      new ClipboardAddon(
-        createWriteOnlyClipboardProvider((text) => navigator.clipboard.writeText(text))
-      )
-    );
     terminal.open(containerEl);
 
     terminal.registerLinkProvider({
@@ -1019,6 +1011,11 @@ export class TerminalTabManager {
       toggleSearch,
     };
     session.parserDisposables.push(resultsDisposable);
+    // OSC 52 (#103): let TUIs such as Claude Code set the system clipboard.
+    // Write-only: read queries get no reply (see osc52-clipboard.ts).
+    session.parserDisposables.push(
+      registerOsc52(terminal.parser, (text) => navigator.clipboard.writeText(text))
+    );
 
     terminal.onSelectionChange(() => {
       if (!this.settings.copyOnSelect) return;
