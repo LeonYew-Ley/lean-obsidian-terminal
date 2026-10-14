@@ -198,7 +198,7 @@ npm run dev          # Watch mode (auto-rebuild on save)
 npm run build        # Production build
 npm test             # Run the Vitest suite
 npm run lint         # Run ESLint (typescript-eslint + eslint-plugin-obsidianmd)
-node install.mjs     # Install to default vault (D:\LOS Test)
+node install.mjs     # Install to default vault (D:\LEAN VAULTS\DEMO)
 ```
 
 ## Contributors
