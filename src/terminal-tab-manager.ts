@@ -7,6 +7,7 @@ import { SerializeAddon } from "@xterm/addon-serialize";
 import { SearchAddon } from "@xterm/addon-search";
 import type { IDisposable } from "@xterm/xterm";
 import { PtyManager } from "./pty-manager";
+import { fitTerminalSession } from "./terminal-layout";
 import { findPathCandidates, splitLineSuffix } from "./path-links";
 import { isObsidianDark } from "./themes";
 import { mixHex } from "./color-utils";
@@ -1050,8 +1051,7 @@ export class TerminalTabManager {
         // need to wait for the CSS visibility change to be painted before fit.
         window.requestAnimationFrame(() => {
           try {
-            session.fitAddon.fit();
-            session.pty.resize(session.terminal.cols, session.terminal.rows);
+            fitTerminalSession(session);
             session.terminal.focus();
           } catch {
             // ignore
@@ -1133,12 +1133,11 @@ export class TerminalTabManager {
     this.requestSaveLayout?.();
   }
 
-  fitActive(): void {
+  fitActive(forceRedraw = false): void {
     const active = this.getActiveSession();
     if (!active) return;
     try {
-      active.fitAddon.fit();
-      active.pty.resize(active.terminal.cols, active.terminal.rows);
+      fitTerminalSession(active, forceRedraw);
     } catch {
       // ignore
     }
