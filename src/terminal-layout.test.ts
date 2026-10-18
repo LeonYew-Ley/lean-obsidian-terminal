@@ -8,6 +8,14 @@ describe("floating status bar", () => {
   it("reserves the observed Things theme overlap, rounded up to a full pixel", () => {
     expect(getStatusBarInset(rect(1109, 75, 598, 837), rect(1185, 881.33, 522, 30.67))).toBe(31);
   });
+  it("reserves space through a floating status bar's top when it has a bottom gap", () => {
+    expect(getStatusBarInset(rect(0, 0, 600, 800), rect(100, 760, 500, 30))).toBe(40);
+  });
+  it("does not reserve space for a status bar entirely above the view", () => {
+    const container = rect(0, 100, 600, 700);
+    expect(getStatusBarInset(container, rect(100, 60, 500, 30))).toBe(0);
+    expect(getStatusBarInset(container, rect(100, 70, 500, 30))).toBe(0);
+  });
   it("does not reserve space for a status bar docked below the view", () => {
     expect(getStatusBarInset(rect(1109, 75, 598, 806), rect(1185, 881, 522, 31))).toBe(0);
   });

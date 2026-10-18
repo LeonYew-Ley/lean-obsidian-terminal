@@ -9,11 +9,11 @@ interface LayoutSession {
   pty: Pick<PtyManager, "resize">;
 }
 
-/** Reserve only the part of a floating status bar covering the terminal bottom. */
+/** Keep the terminal bottom above an overlapping floating status bar, including any bottom gap. */
 export function getStatusBarInset(container: DOMRect, status: DOMRect | null): number {
   if (!status || status.width <= 0 || status.height <= 0 ||
       status.right <= container.left || status.left >= container.right ||
-      status.top >= container.bottom || status.bottom < container.bottom - 1) return 0;
+      status.top >= container.bottom || status.bottom <= container.top) return 0;
   return Math.ceil(Math.min(container.height, container.bottom - status.top));
 }
 
