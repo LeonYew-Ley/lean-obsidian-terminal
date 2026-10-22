@@ -127,6 +127,16 @@ export function repairConptyLayout(
   }
 }
 
+// Per-session memo so restoring N tabs pays for the lookup once, not N times.
+// A string is a resolved package exe; null is a clean "no Store package" answer.
+// A failed lookup (timeout, non-zero exit, missing exe) is never stored, so the
+// next spawn retries instead of pinning the broken alias for the whole session.
+const storePwshCache = new Map<string, string | null>();
+
+export function clearStorePwshCache(): void {
+  storePwshCache.clear();
+}
+
 export function resolveWindowsStorePwshAlias(
   shellPath: string,
   fs: FsApi,
@@ -138,8 +148,8 @@ export function resolveWindowsStorePwshAlias(
   if (!fs.existsSync(shellPath)) return shellPath;
 
   const cached = storePwshCache.get(normalized);
+  if (cached === null) return shellPath;
   if (cached !== undefined) {
-    if (cached === shellPath) return cached;
     try {
       // A Store update moves the versioned folder, so re-check before reuse.
       if (fs.statSync(cached).isFile()) return cached;
@@ -148,54 +158,46 @@ export function resolveWindowsStorePwshAlias(
     }
   }
 
-  const resolved = lookUpStorePwsh(shellPath, fs, childProcess);
-  storePwshCache.set(normalized, resolved);
-  return resolved;
-}
-
-// Per-session memo so restoring N tabs pays for the lookup once, not N times.
-const storePwshCache = new Map<string, string>();
-
-export function clearStorePwshCache(): void {
-  storePwshCache.clear();
+  try {
+    const resolved = lookUpStorePwsh(fs, childProcess);
+    storePwshCache.set(normalized, resolved);
+    return resolved ?? shellPath;
+  } catch {
+    // Leave the alias; the normal shell validation reports any failure.
+    return shellPath;
+  }
 }
 
 // Asks Windows for the installed Store package directly. where.exe is not
 // used: the package folder is not on PATH, and it would return whichever
 // other pwsh.exe is (scoop, dotnet tool) instead of the Store build.
-function lookUpStorePwsh(
-  shellPath: string,
-  fs: FsApi,
-  childProcess: ChildProcessApi
-): string {
-  try {
-    const installLocation = childProcess.execFileSync(
-      "powershell.exe",
-      [
-        "-NoLogo",
-        "-NoProfile",
-        "-NonInteractive",
-        "-Command",
-        "Get-AppxPackage -Name Microsoft.PowerShell | Sort-Object Version -Descending | Select-Object -First 1 -ExpandProperty InstallLocation",
-      ],
-      { encoding: "utf8", timeout: 5000, windowsHide: true }
-    ).trim().split(/\r?\n/).pop()?.trim();
-    if (installLocation) {
-      const candidate = `${installLocation}\\pwsh.exe`;
-      if (fs.statSync(candidate).isFile()) return candidate;
-    }
-  } catch {
-    // Fall through so the normal shell validation reports the failure.
-  }
+// Returns null for a clean empty answer and throws on any failure.
+function lookUpStorePwsh(fs: FsApi, childProcess: ChildProcessApi): string | null {
+  const output = childProcess.execFileSync(
+    "powershell.exe",
+    [
+      "-NoLogo",
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      "Get-AppxPackage -Name Microsoft.PowerShell | Sort-Object { [version]$_.Version } -Descending | Select-Object -First 1 -ExpandProperty InstallLocation",
+    ],
+    { encoding: "utf8", timeout: 5000, windowsHide: true }
+  );
+  // The last line is the path; Windows PowerShell 5.1 can print warnings before it.
+  const installLocation = output.trim().split(/\r?\n/).pop()?.trim();
+  if (!installLocation) return null;
 
-  return shellPath;
+  const candidate = `${installLocation}\\pwsh.exe`;
+  if (!fs.statSync(candidate).isFile()) throw new Error(`Not a file: ${candidate}`);
+  return candidate;
 }
 
 /**
  * Picks the default Windows shell: PowerShell 7 from the standard installer,
  * then the Microsoft Store build, then COMSPEC. The Store alias is only
  * resolved when it actually exists, so machines without PowerShell 7 never
- * pay for the where.exe / powershell.exe lookups (each can block up to 5 s).
+ * pay for the powershell.exe lookup (can block up to 5 s, once per session).
  */
 export function pickWindowsDefaultShell(
   env: Record<string, string | undefined>,

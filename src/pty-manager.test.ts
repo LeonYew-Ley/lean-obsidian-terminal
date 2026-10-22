@@ -189,29 +189,54 @@ describe("resolveWindowsStorePwshAlias", () => {
     } as unknown as FsApi;
   }
 
-  function countingChildProcess(output: string) {
+  // Each call consumes the next output (the last one repeats); an Error is thrown,
+  // like execFileSync does on a non-zero exit or a timeout.
+  function countingChildProcess(...outputs: Array<string | Error>) {
     const calls: string[] = [];
+    const argLists: string[][] = [];
     const childProcess = {
-      execFileSync: (file: string) => {
+      execFileSync: (file: string, args: string[]) => {
+        const output = outputs[Math.min(calls.length, outputs.length - 1)];
         calls.push(file);
+        argLists.push(args);
+        if (output instanceof Error) throw output;
         return output;
       },
     } as unknown as ChildProcessApi;
-    return { calls, childProcess };
+    return { calls, argLists, childProcess };
   }
 
-  it("resolves the Store alias to the installed package via Get-AppxPackage", () => {
+  it("resolves the Store alias via Get-AppxPackage only, never where.exe", () => {
     const { calls, childProcess } = countingChildProcess(`${installLocation}\r\n`);
 
     expect(resolveWindowsStorePwshAlias(alias, storeFs(), childProcess)).toBe(installed);
     expect(calls).toEqual(["powershell.exe"]);
   });
 
-  it("never uses where.exe, so another pwsh on PATH cannot replace the Store build", () => {
-    const { calls, childProcess } = countingChildProcess(installLocation);
+  it("runs a fixed, non-interactive command that never contains the shell path", () => {
+    const { argLists, childProcess } = countingChildProcess(installLocation);
 
     resolveWindowsStorePwshAlias(alias, storeFs(), childProcess);
-    expect(calls).not.toContain("where.exe");
+    const args = argLists[0];
+    expect(args.slice(0, 4)).toEqual(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command"]);
+    expect(args).toHaveLength(5);
+    expect(args[4]).toContain("Get-AppxPackage -Name Microsoft.PowerShell");
+    expect(args.join(" ")).not.toContain(alias);
+  });
+
+  it("sorts packages by parsed version so 7.10 beats 7.9", () => {
+    const { argLists, childProcess } = countingChildProcess(installLocation);
+
+    resolveWindowsStorePwshAlias(alias, storeFs(), childProcess);
+    expect(argLists[0][4]).toContain("Sort-Object { [version]$_.Version } -Descending");
+  });
+
+  it("ignores warning lines printed before the install location", () => {
+    const { childProcess } = countingChildProcess(
+      `WARNING: Module 'Appx' loaded with compatibility\r\n${installLocation}\r\n`
+    );
+
+    expect(resolveWindowsStorePwshAlias(alias, storeFs(), childProcess)).toBe(installed);
   });
 
   it("looks the package up once and reuses the result for later spawns", () => {
@@ -223,21 +248,42 @@ describe("resolveWindowsStorePwshAlias", () => {
     expect(calls).toEqual(["powershell.exe"]);
   });
 
-  it("looks up again when the cached package path no longer exists (Store update)", () => {
-    const { calls, childProcess } = countingChildProcess(installLocation);
+  it("picks up the new versioned folder after a Store update", () => {
+    const updated = "C:\\Program Files\\WindowsApps\\Microsoft.PowerShell_7.6.7.0_x64__8wekyb3d8bbwe\\pwsh.exe";
+    const updatedLocation = updated.slice(0, -"\\pwsh.exe".length);
+    const { calls, childProcess } = countingChildProcess(installLocation, updatedLocation);
 
-    resolveWindowsStorePwshAlias(alias, storeFs(), childProcess);
-    expect(resolveWindowsStorePwshAlias(alias, storeFs([]), childProcess)).toBe(alias);
+    expect(resolveWindowsStorePwshAlias(alias, storeFs([installed]), childProcess)).toBe(installed);
+    // The old folder is gone after the update; only the new one exists.
+    expect(resolveWindowsStorePwshAlias(alias, storeFs([updated]), childProcess)).toBe(updated);
     expect(calls).toEqual(["powershell.exe", "powershell.exe"]);
   });
 
-  it("remembers an unresolvable alias instead of repeating the lookup", () => {
+  it("remembers a clean empty answer instead of repeating the lookup", () => {
     const { calls, childProcess } = countingChildProcess("");
     const fs = storeFs([]);
 
     expect(resolveWindowsStorePwshAlias(alias, fs, childProcess)).toBe(alias);
     expect(resolveWindowsStorePwshAlias(alias, fs, childProcess)).toBe(alias);
     expect(calls).toEqual(["powershell.exe"]);
+  });
+
+  it("does not cache a timeout or non-zero exit, so the next spawn retries", () => {
+    const timeout = Object.assign(new Error("spawnSync powershell.exe ETIMEDOUT"), { code: "ETIMEDOUT" });
+    const { calls, childProcess } = countingChildProcess(timeout, installLocation);
+    const fs = storeFs();
+
+    expect(resolveWindowsStorePwshAlias(alias, fs, childProcess)).toBe(alias);
+    expect(resolveWindowsStorePwshAlias(alias, fs, childProcess)).toBe(installed);
+    expect(calls).toEqual(["powershell.exe", "powershell.exe"]);
+  });
+
+  it("does not cache a registered package whose pwsh.exe is missing (update in flight)", () => {
+    const { calls, childProcess } = countingChildProcess(installLocation);
+
+    expect(resolveWindowsStorePwshAlias(alias, storeFs([]), childProcess)).toBe(alias);
+    expect(resolveWindowsStorePwshAlias(alias, storeFs([installed]), childProcess)).toBe(installed);
+    expect(calls).toEqual(["powershell.exe", "powershell.exe"]);
   });
 
   it("does not spawn anything when the alias does not exist", () => {
@@ -287,6 +333,10 @@ describe("pickWindowsDefaultShell", () => {
     COMSPEC: "C:\\Windows\\System32\\cmd.exe",
   };
 
+  beforeEach(() => {
+    clearStorePwshCache();
+  });
+
   function spawnCounter(output = "") {
     const calls: string[] = [];
     const childProcess = {
@@ -315,10 +365,6 @@ describe("pickWindowsDefaultShell", () => {
     const { calls, childProcess } = spawnCounter();
     expect(pickWindowsDefaultShell(env, fsWith([]), childProcess)).toBe(env.COMSPEC);
     expect(calls).toEqual([]);
-  });
-
-  beforeEach(() => {
-    clearStorePwshCache();
   });
 
   it("resolves the Store alias to the installed package when the alias exists", () => {
