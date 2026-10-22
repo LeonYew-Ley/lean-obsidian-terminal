@@ -9,6 +9,7 @@ import { registerOsc52 } from "./osc52-clipboard";
 import type { IDisposable } from "@xterm/xterm";
 import { PtyManager } from "./pty-manager";
 import { findPathCandidates, splitLineSuffix } from "./path-links";
+import { resolveTabCwd } from "./tab-cwd";
 import { isObsidianDark } from "./themes";
 import { mixHex } from "./color-utils";
 import { findTabColor, DEFAULT_TINT_STRENGTH, MAX_TINT_STRENGTH } from "./tab-colors";
@@ -966,7 +967,7 @@ export class TerminalTabManager {
     this.sessionCounter++;
     const id = `terminal-${this.sessionCounter}`;
     const name = opts?.name ?? `Terminal ${this.sessionCounter}`;
-    const sessionCwd = opts?.cwd ?? this.cwd;
+    const sessionCwd = resolveTabCwd(opts?.cwd, this.cwd);
 
     const containerEl = this.terminalHostEl.createDiv({ cls: "terminal-session" });
     const { terminal, fitAddon, serializeAddon, searchAddon } = this.buildXterm(containerEl, opts);
