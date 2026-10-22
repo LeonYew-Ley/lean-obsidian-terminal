@@ -134,11 +134,14 @@ export function resolveWindowsStorePwshAlias(
 ): string {
   const normalized = shellPath.split("/").join("\\").toLowerCase();
   if (!normalized.endsWith("\\microsoft\\windowsapps\\pwsh.exe")) return shellPath;
+  // A missing alias fails validation anyway; don't pay for the lookups.
+  if (!fs.existsSync(shellPath)) return shellPath;
 
   try {
     const output = childProcess.execFileSync("where.exe", ["pwsh.exe"], {
       encoding: "utf8",
       timeout: 5000,
+      windowsHide: true,
     });
     const candidates = output.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
     for (const candidate of candidates) {
@@ -163,7 +166,7 @@ export function resolveWindowsStorePwshAlias(
         "-Command",
         "Get-AppxPackage -Name Microsoft.PowerShell | Sort-Object Version -Descending | Select-Object -First 1 -ExpandProperty InstallLocation",
       ],
-      { encoding: "utf8", timeout: 5000 }
+      { encoding: "utf8", timeout: 5000, windowsHide: true }
     ).trim();
     if (installLocation) {
       const candidate = `${installLocation}\\pwsh.exe`;
@@ -194,6 +197,8 @@ export function pickWindowsDefaultShell(
     if (env.LOCALAPPDATA && fs.existsSync(storeAlias)) {
       return resolveWindowsStorePwshAlias(storeAlias, fs, childProcess);
     }
+    // existsSync above is also checked inside the resolver, kept here so a
+    // missing alias falls through to COMSPEC instead of returning a dead path.
   } catch {
     // ignore
   }
@@ -271,14 +276,12 @@ export class PtyManager {
     const nodePtyDir = getNodePtyDir(this.pluginDir);
     this.nodePty = loadNodePty(nodePtyDir);
 
-    const requestedShell = shellPath || getDefaultShell();
-    const shell = Platform.isWin
-      ? resolveWindowsStorePwshAlias(
-          requestedShell,
-          requireNode("fs"),
-          requireNode("child_process")
-        )
-      : requestedShell;
+    // getDefaultShell() already resolves the Store alias; only a configured
+    // shell path needs it here, so the lookups don't run twice per tab.
+    const shell =
+      shellPath && Platform.isWin
+        ? resolveWindowsStorePwshAlias(shellPath, requireNode("fs"), requireNode("child_process"))
+        : shellPath || getDefaultShell();
     this._shellPath = shell;
     validateShellPath(shell);
     const baseArgs = getShellArgs(shell);

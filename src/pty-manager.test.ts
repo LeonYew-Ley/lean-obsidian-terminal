@@ -172,6 +172,7 @@ describe("resolveWindowsStorePwshAlias", () => {
 
   it("uses the installed package executable instead of the Store app execution alias", () => {
     const fs = {
+      existsSync: () => true,
       statSync: (path: string) => ({ isFile: () => path === installed }),
     } as unknown as FsApi;
     const childProcess = {
@@ -184,6 +185,7 @@ describe("resolveWindowsStorePwshAlias", () => {
   it("finds the installed Store package when where.exe only returns the alias", () => {
     const installLocation = installed.slice(0, -"\\pwsh.exe".length);
     const fs = {
+      existsSync: () => true,
       statSync: (path: string) => ({ isFile: () => path === installed }),
     } as unknown as FsApi;
     const childProcess = {
@@ -191,6 +193,20 @@ describe("resolveWindowsStorePwshAlias", () => {
     } as unknown as ChildProcessApi;
 
     expect(resolveWindowsStorePwshAlias(alias, fs, childProcess)).toBe(installed);
+  });
+
+  it("does not spawn anything when the alias does not exist", () => {
+    const calls: string[] = [];
+    const fs = { existsSync: () => false } as unknown as FsApi;
+    const childProcess = {
+      execFileSync: (file: string) => {
+        calls.push(file);
+        return "";
+      },
+    } as unknown as ChildProcessApi;
+
+    expect(resolveWindowsStorePwshAlias(alias, fs, childProcess)).toBe(alias);
+    expect(calls).toEqual([]);
   });
 
   it("does not change a normal PowerShell path", () => {
@@ -203,6 +219,7 @@ describe("resolveWindowsStorePwshAlias", () => {
 
   it("leaves the alias unchanged when no usable package executable is found", () => {
     const fs = {
+      existsSync: () => true,
       statSync: () => {
         throw Object.assign(new Error("Access denied"), { code: "EACCES" });
       },
