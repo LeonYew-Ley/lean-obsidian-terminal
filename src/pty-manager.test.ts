@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  pickWindowsDefaultShell,
   repairConptyLayout,
   resolveWindowsStorePwshAlias,
   shouldEnableConptyDll,
@@ -211,5 +212,57 @@ describe("resolveWindowsStorePwshAlias", () => {
     } as unknown as ChildProcessApi;
 
     expect(resolveWindowsStorePwshAlias(alias, fs, childProcess)).toBe(alias);
+  });
+});
+
+describe("pickWindowsDefaultShell", () => {
+  const standard = "C:\\Program Files\\PowerShell\\7\\pwsh.exe";
+  const alias = "C:\\Users\\Test\\AppData\\Local\\Microsoft\\WindowsApps\\pwsh.exe";
+  const installed = "C:\\Program Files\\WindowsApps\\Microsoft.PowerShell_7.6.6.0_x64__8wekyb3d8bbwe\\pwsh.exe";
+  const env = {
+    ProgramFiles: "C:\\Program Files",
+    LOCALAPPDATA: "C:\\Users\\Test\\AppData\\Local",
+    COMSPEC: "C:\\Windows\\System32\\cmd.exe",
+  };
+
+  function spawnCounter(output = "") {
+    const calls: string[] = [];
+    const childProcess = {
+      execFileSync: (file: string) => {
+        calls.push(file);
+        return output;
+      },
+    } as unknown as ChildProcessApi;
+    return { calls, childProcess };
+  }
+
+  function fsWith(files: string[]): FsApi {
+    return {
+      existsSync: (path: string) => files.includes(path),
+      statSync: (path: string) => ({ isFile: () => files.includes(path) }),
+    } as unknown as FsApi;
+  }
+
+  it("prefers the standard installer path without spawning anything", () => {
+    const { calls, childProcess } = spawnCounter();
+    expect(pickWindowsDefaultShell(env, fsWith([standard, alias]), childProcess)).toBe(standard);
+    expect(calls).toEqual([]);
+  });
+
+  it("falls back to COMSPEC without spawning when neither PowerShell 7 path exists", () => {
+    const { calls, childProcess } = spawnCounter();
+    expect(pickWindowsDefaultShell(env, fsWith([]), childProcess)).toBe(env.COMSPEC);
+    expect(calls).toEqual([]);
+  });
+
+  it("resolves the Store alias to the installed package when the alias exists", () => {
+    const { calls, childProcess } = spawnCounter(`${installed}\r\n${alias}\r\n`);
+    expect(pickWindowsDefaultShell(env, fsWith([alias, installed]), childProcess)).toBe(installed);
+    expect(calls).toEqual(["where.exe"]);
+  });
+
+  it("keeps the alias when it exists but cannot be resolved (previous behaviour)", () => {
+    const { childProcess } = spawnCounter(`${alias}\r\n`);
+    expect(pickWindowsDefaultShell(env, fsWith([alias]), childProcess)).toBe(alias);
   });
 });

@@ -176,23 +176,41 @@ export function resolveWindowsStorePwshAlias(
   return shellPath;
 }
 
+/**
+ * Picks the default Windows shell: PowerShell 7 from the standard installer,
+ * then the Microsoft Store build, then COMSPEC. The Store alias is only
+ * resolved when it actually exists, so machines without PowerShell 7 never
+ * pay for the where.exe / powershell.exe lookups (each can block up to 5 s).
+ */
+export function pickWindowsDefaultShell(
+  env: Record<string, string | undefined>,
+  fs: FsApi,
+  childProcess: ChildProcessApi
+): string {
+  const standardPwsh = (env.ProgramFiles || "") + "\\PowerShell\\7\\pwsh.exe";
+  const storeAlias = (env.LOCALAPPDATA || "") + "\\Microsoft\\WindowsApps\\pwsh.exe";
+  try {
+    if (env.ProgramFiles && fs.existsSync(standardPwsh)) return standardPwsh;
+    if (env.LOCALAPPDATA && fs.existsSync(storeAlias)) {
+      return resolveWindowsStorePwshAlias(storeAlias, fs, childProcess);
+    }
+  } catch {
+    // ignore
+  }
+  return env.COMSPEC || "cmd.exe";
+}
+
 function getDefaultShell(): string {
   if (Platform.isWin) {
-    const standardPwsh = nodeProcess.env.ProgramFiles + "\\PowerShell\\7\\pwsh.exe";
-    const storeAlias = (nodeProcess.env.LOCALAPPDATA || "") + "\\Microsoft\\WindowsApps\\pwsh.exe";
     try {
-      const fs = requireNode("fs");
-      if (standardPwsh && fs.existsSync(standardPwsh)) return standardPwsh;
-      const resolvedStorePwsh = resolveWindowsStorePwshAlias(
-        storeAlias,
-        fs,
+      return pickWindowsDefaultShell(
+        nodeProcess.env,
+        requireNode("fs"),
         requireNode("child_process")
       );
-      if (resolvedStorePwsh !== storeAlias) return resolvedStorePwsh;
     } catch {
-      // ignore
+      return nodeProcess.env.COMSPEC || "cmd.exe";
     }
-    return nodeProcess.env.COMSPEC || "cmd.exe";
   }
   return nodeProcess.env.SHELL || "/bin/bash";
 }
