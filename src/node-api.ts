@@ -50,7 +50,16 @@ export interface PathApi {
 }
 
 export interface ChildProcessApi {
-  execFileSync(file: string, args: string[], options?: { timeout?: number }): unknown;
+  execFileSync(
+    file: string,
+    args: string[],
+    options: { encoding: "utf8"; timeout?: number; windowsHide?: boolean }
+  ): string;
+  execFileSync(
+    file: string,
+    args: string[],
+    options?: { timeout?: number; windowsHide?: boolean }
+  ): unknown;
 }
 
 export interface CryptoHash {
