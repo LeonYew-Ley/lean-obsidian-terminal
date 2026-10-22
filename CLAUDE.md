@@ -16,7 +16,7 @@ npm run dev         # Watch mode (auto-rebuild on changes)
 npm run build       # Production build (minified, type-checked)
 npm test            # Run Vitest suite
 npm run lint        # Run ESLint (typescript-eslint type-checked + eslint-plugin-obsidianmd)
-node install.mjs    # Copy plugin to D:\LOS Test vault
+node install.mjs    # Copy plugin to D:\LEAN VAULTS\DEMO vault
 ```
 
 ## Architecture

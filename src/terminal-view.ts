@@ -31,7 +31,7 @@ export class TerminalView extends ItemView {
   }
 
   getDisplayText(): string {
-    return "Terminal";
+    return "Lean Terminal";
   }
 
   getIcon(): string {

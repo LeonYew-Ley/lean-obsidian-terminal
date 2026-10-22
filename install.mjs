@@ -2,13 +2,13 @@
  * Installs the plugin into an Obsidian vault's .obsidian/plugins directory.
  *
  * Usage: node install.mjs [vault-path]
- * Default vault: D:\LOS Test
+ * Default vault: D:\LEAN VAULTS\DEMO
  */
 
 import { cpSync, mkdirSync, existsSync } from "fs";
 import { resolve, join } from "path";
 
-const vaultPath = process.argv[2] || "D:\\LOS Test";
+const vaultPath = process.argv[2] || "D:\\LEAN VAULTS\\DEMO";
 const pluginDir = join(vaultPath, ".obsidian", "plugins", "lean-terminal");
 
 if (!existsSync(join(vaultPath, ".obsidian"))) {

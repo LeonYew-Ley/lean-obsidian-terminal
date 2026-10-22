@@ -77,7 +77,7 @@ export default class TerminalPlugin extends Plugin {
     });
 
     // Ribbon icon
-    this.ribbonEl = this.addRibbonIcon(this.settings.ribbonIcon, "Open terminal", () => {
+    this.ribbonEl = this.addRibbonIcon(this.settings.ribbonIcon, "Open Lean Terminal", () => {
       void this.activateTerminal();
     });
 
@@ -195,9 +195,6 @@ export default class TerminalPlugin extends Plugin {
 
     this.app.workspace.onLayoutReady(() => void this.maybeShowUpdateNotice());
 
-    // Flush any pending layout save before Obsidian quits. Without this, a
-    // typed-then-quickly-quit scenario loses the last few seconds of activity
-    // because Obsidian's requestSaveLayout is debounced.
     this.registerEvent(
       this.app.workspace.on("file-menu", (menu, abstractFile) => {
         const vaultRelDir = abstractFile instanceof TFolder
@@ -217,6 +214,12 @@ export default class TerminalPlugin extends Plugin {
       })
     );
 
+    // Flush any pending layout save before Obsidian quits. Without this, a
+    // typed-then-quickly-quit scenario loses the last few seconds of activity
+    // because Obsidian's requestSaveLayout is debounced.
+    // NOTE: requestSaveLayout is an UNDOCUMENTED Obsidian API (not in obsidian.d.ts).
+    // It is the only way to force the debounced save to run; listed as an
+    // exception in Plugin Requirements.md.
     this.registerEvent(
       this.app.workspace.on("quit", () => {
         void this.app.workspace.requestSaveLayout.run();
