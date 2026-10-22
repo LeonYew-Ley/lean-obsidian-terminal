@@ -129,8 +129,8 @@ export function repairConptyLayout(
 
 // Per-session memo so restoring N tabs pays for the lookup once, not N times.
 // A string is a resolved package exe; null is a clean "no Store package" answer.
-// A failed lookup (timeout, non-zero exit, missing exe) is never stored, so the
-// next spawn retries instead of pinning the broken alias for the whole session.
+// A failed lookup (timeout, non-zero exit, missing exe) is never stored, so it is
+// retried once the cool-off below ends instead of pinning the alias for the session.
 const storePwshCache = new Map<string, string | null>();
 
 // After a failed lookup, skip the lookup for a minute. The call is synchronous on
@@ -166,8 +166,10 @@ export function resolveWindowsStorePwshAlias(
     }
   }
 
-  if (storePwshFailedAt !== null && Date.now() - storePwshFailedAt < STORE_PWSH_RETRY_MS) {
-    return shellPath;
+  if (storePwshFailedAt !== null) {
+    // A negative elapsed time means the clock was set back; don't wait for it.
+    const elapsed = Date.now() - storePwshFailedAt;
+    if (elapsed >= 0 && elapsed < STORE_PWSH_RETRY_MS) return shellPath;
   }
 
   try {
@@ -211,7 +213,8 @@ function lookUpStorePwsh(fs: FsApi, childProcess: ChildProcessApi): string | nul
  * Picks the default Windows shell: PowerShell 7 from the standard installer,
  * then the Microsoft Store build, then COMSPEC. The Store alias is only
  * resolved when it actually exists, so machines without PowerShell 7 never
- * pay for the powershell.exe lookup (can block up to 5 s, once per session).
+ * pay for the powershell.exe lookup (can block up to 5 s, once per session, or
+ * once per minute while it keeps failing).
  */
 export function pickWindowsDefaultShell(
   env: Record<string, string | undefined>,

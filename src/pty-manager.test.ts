@@ -311,6 +311,29 @@ describe("resolveWindowsStorePwshAlias", () => {
     expect(calls).toEqual(["powershell.exe", "powershell.exe"]);
   });
 
+  it("ends the cool-off when the system clock is set back instead of waiting for it to catch up", () => {
+    const timeout = new Error("spawnSync powershell.exe ETIMEDOUT");
+    const { calls, childProcess } = countingChildProcess(timeout, installLocation);
+    const fs = storeFs();
+
+    expect(resolveWindowsStorePwshAlias(alias, fs, childProcess)).toBe(alias);
+    vi.setSystemTime(new Date("2026-10-22T10:00:00Z"));
+    expect(resolveWindowsStorePwshAlias(alias, fs, childProcess)).toBe(installed);
+    expect(calls).toEqual(["powershell.exe", "powershell.exe"]);
+  });
+
+  it("returns the alias, not the stale exe, when a Store update removed it and the lookup then fails", () => {
+    const timeout = new Error("spawnSync powershell.exe ETIMEDOUT");
+    const { calls, childProcess } = countingChildProcess(installLocation, timeout);
+
+    expect(resolveWindowsStorePwshAlias(alias, storeFs([installed]), childProcess)).toBe(installed);
+    // Update removes the old folder; the re-lookup fails and starts the cool-off.
+    expect(resolveWindowsStorePwshAlias(alias, storeFs([]), childProcess)).toBe(alias);
+    vi.advanceTimersByTime(STORE_RETRY_MS - 1);
+    expect(resolveWindowsStorePwshAlias(alias, storeFs([]), childProcess)).toBe(alias);
+    expect(calls).toEqual(["powershell.exe", "powershell.exe"]);
+  });
+
   it("forgets the cool-off when the cache is cleared", () => {
     const timeout = new Error("spawnSync powershell.exe ETIMEDOUT");
     const { calls, childProcess } = countingChildProcess(timeout, installLocation);
