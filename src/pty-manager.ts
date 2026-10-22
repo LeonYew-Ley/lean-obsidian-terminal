@@ -133,8 +133,16 @@ export function repairConptyLayout(
 // next spawn retries instead of pinning the broken alias for the whole session.
 const storePwshCache = new Map<string, string | null>();
 
+// After a failed lookup, skip the lookup for a minute. The call is synchronous on
+// the UI thread, so a hung AppX service (5 s timeout) would otherwise freeze
+// every tab spawn; a minute is still short enough to recover from a transient
+// failure without restarting Obsidian.
+const STORE_PWSH_RETRY_MS = 60_000;
+let storePwshFailedAt: number | null = null;
+
 export function clearStorePwshCache(): void {
   storePwshCache.clear();
+  storePwshFailedAt = null;
 }
 
 export function resolveWindowsStorePwshAlias(
@@ -158,12 +166,18 @@ export function resolveWindowsStorePwshAlias(
     }
   }
 
+  if (storePwshFailedAt !== null && Date.now() - storePwshFailedAt < STORE_PWSH_RETRY_MS) {
+    return shellPath;
+  }
+
   try {
     const resolved = lookUpStorePwsh(fs, childProcess);
     storePwshCache.set(normalized, resolved);
+    storePwshFailedAt = null;
     return resolved ?? shellPath;
   } catch {
     // Leave the alias; the normal shell validation reports any failure.
+    storePwshFailedAt = Date.now();
     return shellPath;
   }
 }

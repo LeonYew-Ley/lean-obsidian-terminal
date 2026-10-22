@@ -1,4 +1,4 @@
-import { beforeEach, describe, it, expect } from "vitest";
+import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 import {
   clearStorePwshCache,
   pickWindowsDefaultShell,
@@ -172,9 +172,17 @@ describe("resolveWindowsStorePwshAlias", () => {
   const installed = "C:\\Program Files\\WindowsApps\\Microsoft.PowerShell_7.6.6.0_x64__8wekyb3d8bbwe\\pwsh.exe";
 
   const installLocation = installed.slice(0, -"\\pwsh.exe".length);
+  // Mirrors the 60 s cool-off after a failed lookup in pty-manager.ts.
+  const STORE_RETRY_MS = 60_000;
 
   beforeEach(() => {
     clearStorePwshCache();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-22T12:00:00Z"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   function storeFs(present: string[] = [installed]): FsApi {
@@ -194,16 +202,18 @@ describe("resolveWindowsStorePwshAlias", () => {
   function countingChildProcess(...outputs: Array<string | Error>) {
     const calls: string[] = [];
     const argLists: string[][] = [];
+    const optionsList: unknown[] = [];
     const childProcess = {
-      execFileSync: (file: string, args: string[]) => {
+      execFileSync: (file: string, args: string[], options: unknown) => {
         const output = outputs[Math.min(calls.length, outputs.length - 1)];
         calls.push(file);
         argLists.push(args);
+        optionsList.push(options);
         if (output instanceof Error) throw output;
         return output;
       },
     } as unknown as ChildProcessApi;
-    return { calls, argLists, childProcess };
+    return { calls, argLists, optionsList, childProcess };
   }
 
   it("resolves the Store alias via Get-AppxPackage only, never where.exe", () => {
@@ -224,7 +234,14 @@ describe("resolveWindowsStorePwshAlias", () => {
     expect(args.join(" ")).not.toContain(alias);
   });
 
-  it("sorts packages by parsed version so 7.10 beats 7.9", () => {
+  it("pins the 5 s timeout, hidden window and utf8 output on the lookup", () => {
+    const { optionsList, childProcess } = countingChildProcess(installLocation);
+
+    resolveWindowsStorePwshAlias(alias, storeFs(), childProcess);
+    expect(optionsList[0]).toEqual({ encoding: "utf8", timeout: 5000, windowsHide: true });
+  });
+
+  it("pins the numeric [version] sort in the command", () => {
     const { argLists, childProcess } = countingChildProcess(installLocation);
 
     resolveWindowsStorePwshAlias(alias, storeFs(), childProcess);
@@ -268,12 +285,39 @@ describe("resolveWindowsStorePwshAlias", () => {
     expect(calls).toEqual(["powershell.exe"]);
   });
 
-  it("does not cache a timeout or non-zero exit, so the next spawn retries", () => {
+  it("does not cache a timeout or non-zero exit, so a later spawn retries", () => {
     const timeout = Object.assign(new Error("spawnSync powershell.exe ETIMEDOUT"), { code: "ETIMEDOUT" });
     const { calls, childProcess } = countingChildProcess(timeout, installLocation);
     const fs = storeFs();
 
     expect(resolveWindowsStorePwshAlias(alias, fs, childProcess)).toBe(alias);
+    vi.advanceTimersByTime(STORE_RETRY_MS + 1);
+    expect(resolveWindowsStorePwshAlias(alias, fs, childProcess)).toBe(installed);
+    expect(calls).toEqual(["powershell.exe", "powershell.exe"]);
+  });
+
+  it("does not look up again for 60 s after a failure, so a hung lookup cannot freeze every tab", () => {
+    const timeout = Object.assign(new Error("spawnSync powershell.exe ETIMEDOUT"), { code: "ETIMEDOUT" });
+    const { calls, childProcess } = countingChildProcess(timeout, installLocation);
+    const fs = storeFs();
+
+    expect(resolveWindowsStorePwshAlias(alias, fs, childProcess)).toBe(alias);
+    vi.advanceTimersByTime(STORE_RETRY_MS - 1);
+    expect(resolveWindowsStorePwshAlias(alias, fs, childProcess)).toBe(alias);
+    expect(calls).toEqual(["powershell.exe"]);
+
+    vi.advanceTimersByTime(2);
+    expect(resolveWindowsStorePwshAlias(alias, fs, childProcess)).toBe(installed);
+    expect(calls).toEqual(["powershell.exe", "powershell.exe"]);
+  });
+
+  it("forgets the cool-off when the cache is cleared", () => {
+    const timeout = new Error("spawnSync powershell.exe ETIMEDOUT");
+    const { calls, childProcess } = countingChildProcess(timeout, installLocation);
+    const fs = storeFs();
+
+    resolveWindowsStorePwshAlias(alias, fs, childProcess);
+    clearStorePwshCache();
     expect(resolveWindowsStorePwshAlias(alias, fs, childProcess)).toBe(installed);
     expect(calls).toEqual(["powershell.exe", "powershell.exe"]);
   });
@@ -282,7 +326,22 @@ describe("resolveWindowsStorePwshAlias", () => {
     const { calls, childProcess } = countingChildProcess(installLocation);
 
     expect(resolveWindowsStorePwshAlias(alias, storeFs([]), childProcess)).toBe(alias);
+    vi.advanceTimersByTime(STORE_RETRY_MS + 1);
     expect(resolveWindowsStorePwshAlias(alias, storeFs([installed]), childProcess)).toBe(installed);
+    expect(calls).toEqual(["powershell.exe", "powershell.exe"]);
+  });
+
+  it("treats a package path that exists but is not a file as a failed lookup", () => {
+    const { calls, childProcess } = countingChildProcess(installLocation);
+    const notAFile = {
+      existsSync: () => true,
+      statSync: () => ({ isFile: () => false }),
+    } as unknown as FsApi;
+
+    expect(resolveWindowsStorePwshAlias(alias, notAFile, childProcess)).toBe(alias);
+    // Not cached as a clean answer: after the cool-off it is looked up again.
+    vi.advanceTimersByTime(STORE_RETRY_MS + 1);
+    expect(resolveWindowsStorePwshAlias(alias, storeFs(), childProcess)).toBe(installed);
     expect(calls).toEqual(["powershell.exe", "powershell.exe"]);
   });
 
