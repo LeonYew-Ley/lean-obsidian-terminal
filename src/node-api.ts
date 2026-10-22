@@ -15,6 +15,7 @@
 export interface FsStats {
   mtime: Date;
   isFile(): boolean;
+  isDirectory(): boolean;
 }
 
 export interface FsReadStream {
