@@ -15,4 +15,8 @@ describe("resolveTabCwd", () => {
   it("falls back to the vault root when the cwd is an empty string", () => {
     expect(resolveTabCwd("", vault)).toBe(vault);
   });
+
+  it("falls back to the vault root when the cwd is only whitespace", () => {
+    expect(resolveTabCwd("  ", vault)).toBe(vault);
+  });
 });
