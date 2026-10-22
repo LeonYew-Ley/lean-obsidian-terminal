@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest";
+import { beforeEach, describe, it, expect } from "vitest";
 import {
+  clearStorePwshCache,
   pickWindowsDefaultShell,
   repairConptyLayout,
   resolveWindowsStorePwshAlias,
@@ -170,29 +171,73 @@ describe("resolveWindowsStorePwshAlias", () => {
   const alias = "C:\\Users\\Test\\AppData\\Local\\Microsoft\\WindowsApps\\pwsh.exe";
   const installed = "C:\\Program Files\\WindowsApps\\Microsoft.PowerShell_7.6.6.0_x64__8wekyb3d8bbwe\\pwsh.exe";
 
-  it("uses the installed package executable instead of the Store app execution alias", () => {
-    const fs = {
-      existsSync: () => true,
-      statSync: (path: string) => ({ isFile: () => path === installed }),
-    } as unknown as FsApi;
-    const childProcess = {
-      execFileSync: () => `${installed}\r\n${alias}\r\n`,
-    } as unknown as ChildProcessApi;
+  const installLocation = installed.slice(0, -"\\pwsh.exe".length);
 
-    expect(resolveWindowsStorePwshAlias(alias, fs, childProcess)).toBe(installed);
+  beforeEach(() => {
+    clearStorePwshCache();
   });
 
-  it("finds the installed Store package when where.exe only returns the alias", () => {
-    const installLocation = installed.slice(0, -"\\pwsh.exe".length);
-    const fs = {
+  function storeFs(present: string[] = [installed]): FsApi {
+    return {
       existsSync: () => true,
-      statSync: (path: string) => ({ isFile: () => path === installed }),
+      statSync: (path: string) => {
+        if (!present.includes(path)) {
+          throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+        }
+        return { isFile: () => true };
+      },
     } as unknown as FsApi;
+  }
+
+  function countingChildProcess(output: string) {
+    const calls: string[] = [];
     const childProcess = {
-      execFileSync: (file: string) => file === "where.exe" ? `${alias}\r\n` : installLocation,
+      execFileSync: (file: string) => {
+        calls.push(file);
+        return output;
+      },
     } as unknown as ChildProcessApi;
+    return { calls, childProcess };
+  }
+
+  it("resolves the Store alias to the installed package via Get-AppxPackage", () => {
+    const { calls, childProcess } = countingChildProcess(`${installLocation}\r\n`);
+
+    expect(resolveWindowsStorePwshAlias(alias, storeFs(), childProcess)).toBe(installed);
+    expect(calls).toEqual(["powershell.exe"]);
+  });
+
+  it("never uses where.exe, so another pwsh on PATH cannot replace the Store build", () => {
+    const { calls, childProcess } = countingChildProcess(installLocation);
+
+    resolveWindowsStorePwshAlias(alias, storeFs(), childProcess);
+    expect(calls).not.toContain("where.exe");
+  });
+
+  it("looks the package up once and reuses the result for later spawns", () => {
+    const { calls, childProcess } = countingChildProcess(installLocation);
+    const fs = storeFs();
 
     expect(resolveWindowsStorePwshAlias(alias, fs, childProcess)).toBe(installed);
+    expect(resolveWindowsStorePwshAlias(alias, fs, childProcess)).toBe(installed);
+    expect(calls).toEqual(["powershell.exe"]);
+  });
+
+  it("looks up again when the cached package path no longer exists (Store update)", () => {
+    const { calls, childProcess } = countingChildProcess(installLocation);
+
+    resolveWindowsStorePwshAlias(alias, storeFs(), childProcess);
+    expect(resolveWindowsStorePwshAlias(alias, storeFs([]), childProcess)).toBe(alias);
+    expect(calls).toEqual(["powershell.exe", "powershell.exe"]);
+  });
+
+  it("remembers an unresolvable alias instead of repeating the lookup", () => {
+    const { calls, childProcess } = countingChildProcess("");
+    const fs = storeFs([]);
+
+    expect(resolveWindowsStorePwshAlias(alias, fs, childProcess)).toBe(alias);
+    expect(resolveWindowsStorePwshAlias(alias, fs, childProcess)).toBe(alias);
+    expect(calls).toEqual(["powershell.exe"]);
   });
 
   it("does not spawn anything when the alias does not exist", () => {
@@ -225,7 +270,7 @@ describe("resolveWindowsStorePwshAlias", () => {
       },
     } as unknown as FsApi;
     const childProcess = {
-      execFileSync: () => `${alias}\r\n`,
+      execFileSync: () => installLocation,
     } as unknown as ChildProcessApi;
 
     expect(resolveWindowsStorePwshAlias(alias, fs, childProcess)).toBe(alias);
@@ -272,14 +317,19 @@ describe("pickWindowsDefaultShell", () => {
     expect(calls).toEqual([]);
   });
 
+  beforeEach(() => {
+    clearStorePwshCache();
+  });
+
   it("resolves the Store alias to the installed package when the alias exists", () => {
-    const { calls, childProcess } = spawnCounter(`${installed}\r\n${alias}\r\n`);
+    const installLocation = installed.slice(0, -"\\pwsh.exe".length);
+    const { calls, childProcess } = spawnCounter(`${installLocation}\r\n`);
     expect(pickWindowsDefaultShell(env, fsWith([alias, installed]), childProcess)).toBe(installed);
-    expect(calls).toEqual(["where.exe"]);
+    expect(calls).toEqual(["powershell.exe"]);
   });
 
   it("keeps the alias when it exists but cannot be resolved (previous behaviour)", () => {
-    const { childProcess } = spawnCounter(`${alias}\r\n`);
+    const { childProcess } = spawnCounter("");
     expect(pickWindowsDefaultShell(env, fsWith([alias]), childProcess)).toBe(alias);
   });
 });

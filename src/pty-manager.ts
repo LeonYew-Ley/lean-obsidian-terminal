@@ -134,28 +134,40 @@ export function resolveWindowsStorePwshAlias(
 ): string {
   const normalized = shellPath.split("/").join("\\").toLowerCase();
   if (!normalized.endsWith("\\microsoft\\windowsapps\\pwsh.exe")) return shellPath;
-  // A missing alias fails validation anyway; don't pay for the lookups.
+  // A missing alias fails validation anyway; don't pay for the lookup.
   if (!fs.existsSync(shellPath)) return shellPath;
 
-  try {
-    const output = childProcess.execFileSync("where.exe", ["pwsh.exe"], {
-      encoding: "utf8",
-      timeout: 5000,
-      windowsHide: true,
-    });
-    const candidates = output.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-    for (const candidate of candidates) {
-      if (candidate.split("/").join("\\").toLowerCase() === normalized) continue;
-      try {
-        if (fs.statSync(candidate).isFile()) return candidate;
-      } catch {
-        // Try the next result from where.exe.
-      }
+  const cached = storePwshCache.get(normalized);
+  if (cached !== undefined) {
+    if (cached === shellPath) return cached;
+    try {
+      // A Store update moves the versioned folder, so re-check before reuse.
+      if (fs.statSync(cached).isFile()) return cached;
+    } catch {
+      // Stale entry: look the package up again.
     }
-  } catch {
-    // Try the Store package lookup below.
   }
 
+  const resolved = lookUpStorePwsh(shellPath, fs, childProcess);
+  storePwshCache.set(normalized, resolved);
+  return resolved;
+}
+
+// Per-session memo so restoring N tabs pays for the lookup once, not N times.
+const storePwshCache = new Map<string, string>();
+
+export function clearStorePwshCache(): void {
+  storePwshCache.clear();
+}
+
+// Asks Windows for the installed Store package directly. where.exe is not
+// used: the package folder is not on PATH, and it would return whichever
+// other pwsh.exe is (scoop, dotnet tool) instead of the Store build.
+function lookUpStorePwsh(
+  shellPath: string,
+  fs: FsApi,
+  childProcess: ChildProcessApi
+): string {
   try {
     const installLocation = childProcess.execFileSync(
       "powershell.exe",
@@ -167,7 +179,7 @@ export function resolveWindowsStorePwshAlias(
         "Get-AppxPackage -Name Microsoft.PowerShell | Sort-Object Version -Descending | Select-Object -First 1 -ExpandProperty InstallLocation",
       ],
       { encoding: "utf8", timeout: 5000, windowsHide: true }
-    ).trim();
+    ).trim().split(/\r?\n/).pop()?.trim();
     if (installLocation) {
       const candidate = `${installLocation}\\pwsh.exe`;
       if (fs.statSync(candidate).isFile()) return candidate;
