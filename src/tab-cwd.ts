@@ -33,12 +33,3 @@ export function planTabCwd(
     ? { spawn: requested, stored: requested, fellBack: false }
     : { spawn: fallback, stored: requested, fellBack: true };
 }
-
-/** The directory to spawn a new tab's shell in. See `planTabCwd`. */
-export function resolveTabCwd(
-  requested: string | undefined,
-  fallback: string,
-  isDir: (path: string) => boolean
-): string {
-  return planTabCwd(requested, fallback, isDir).spawn;
-}

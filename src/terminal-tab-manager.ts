@@ -971,8 +971,8 @@ export class TerminalTabManager {
     const cwdPlan = planTabCwd(opts?.cwd, this.cwd, (p) => requireNode("fs").statSync(p).isDirectory());
     const sessionCwd = cwdPlan.spawn;
     if (cwdPlan.fellBack) {
-      console.warn(`[lean-terminal] Folder not found: ${cwdPlan.stored}. Opened ${sessionCwd} instead.`);
-      new Notice(`Folder not found: ${cwdPlan.stored}. Opened the vault root instead.`);
+      console.warn(`[lean-terminal] Folder not available: ${cwdPlan.stored}. Opened ${sessionCwd} instead.`);
+      new Notice(`Folder not available: ${cwdPlan.stored}. Opened the vault root instead.`);
     }
 
     const containerEl = this.terminalHostEl.createDiv({ cls: "terminal-session" });
