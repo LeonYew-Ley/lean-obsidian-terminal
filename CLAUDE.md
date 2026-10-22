@@ -31,6 +31,8 @@ src/
   binary-manager.ts         # Download/manage node-pty native binaries from GitHub releases
   node-api.ts               # Structural types for Node APIs used via Electron's require() (no @types/node)
   path-links.ts             # Pure helpers: find clickable path tokens, split :line[:col] suffix
+  tab-cwd.ts                # Pure helper: resolve a new tab's cwd, empty or whitespace falls back to the vault root
+  osc52-clipboard.ts        # OSC 52 parser handler: write-only clipboard support for terminal apps
   update-notice.ts          # Pure helpers: when to show the one-time update notice (minor/major bumps only)
   update-notice-modal.ts    # The update notice modal: what's new list and support link
   key-handler-registry.ts   # Registry backing the public registerKeyHandler() API
@@ -60,7 +62,8 @@ Plugin > View > TabManager > PtyManager chain. BinaryManager handles native modu
 - **Shell auto-detect**: Windows tries PowerShell 7 then cmd.exe; macOS/Linux uses `$SHELL`
 - **Settings UI**: declarative schema with in-app settings search on Obsidian 1.13+, falling back to imperative rendering on older supported versions (minAppVersion unchanged)
 - **CI/CD**: Bare semver tags (`1.4.0`, never `v1.4.0` - must match manifest.json exactly) trigger GitHub Actions (build plugin + native binaries + create release); `arm64-prebuilds/` is no longer tracked in git - CI downloads it from the `arm64-prebuilds-v1` release asset
-- **Tests**: Vitest suite via `npm test` (100 tests / 10 files as of writing), colocated as `src/*.test.ts` with mocks in `__mocks__/`
+- **CSS scoping**: every `styles.css` selector must start with `.workspace-leaf-content[data-type="terminal-view"]` or `.lean-`; elements attached to `document.body` use `lean-` classes. `src/styles-scoping.test.ts` enforces this and bans at-rules
+- **Tests**: Vitest suite via `npm test` (155 tests / 17 files as of writing), colocated as `src/*.test.ts` with mocks in `__mocks__/`
 - **Lint**: `npm run lint` runs ESLint (typescript-eslint type-checked + eslint-plugin-obsidianmd). Node API access must go through `src/node-api.ts` structural types - the Obsidian review bot type-checks without `@types/node`
 
 ## Agile Artifacts

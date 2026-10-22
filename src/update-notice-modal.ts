@@ -3,11 +3,10 @@ import { SUPPORT_URL } from "./update-notice";
 
 /** Short what's-new lines for the current minor release. Edit per release. */
 export const WHATS_NEW: string[] = [
-  "Windows ARM64: fixed the missing conpty.dll error, with automatic repair of existing installs.",
-  "Tab commands now target the focused pane, so split terminals behave.",
-  "Escape keeps focus in the terminal (turn off in settings if you prefer).",
-  "New minimum contrast setting for readable grey and dim text.",
-  "This update notice appears only after minor or major releases and can be turned off in settings.",
+  "Terminal apps such as Claude Code can now set your clipboard (OSC 52). It is write-only, so programs can never read it.",
+  "The panel title and ribbon tooltip now say Lean Terminal.",
+  "Tabs with an empty or missing working directory now open in your vault instead of Obsidian's install folder.",
+  "Styling: the plugin's CSS classes are now scoped and prefixed with lean-. CSS snippets that target the old .terminal-* classes need updating.",
 ];
 
 export class UpdateNoticeModal extends Modal {
