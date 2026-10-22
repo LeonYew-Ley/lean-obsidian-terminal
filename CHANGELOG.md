@@ -2,6 +2,18 @@
 
 All notable changes to Lean Obsidian Terminal are documented here.
 
+## 1.6.0 - October 22, 2026
+
+### Improvements
+
+- **Clipboard:** terminal apps such as Claude Code can now set your system clipboard through OSC 52. It is write-only, so programs can never read your clipboard (#103).
+- **Title:** the panel title and ribbon tooltip now say Lean Terminal.
+- **Styling:** the plugin's CSS is now scoped to the terminal view and no longer leaks into the rest of Obsidian. The classes attached to the page body were renamed to `lean-terminal-drag-label`, `lean-terminal-tab-context-menu` and `lean-terminal-ctx-*`, so CSS snippets that target the old `.terminal-*` classes need updating, and some overrides may need a more specific selector.
+
+### Bug fixes
+
+- **Working directory:** fixed tabs with an empty or missing working directory opening in Obsidian's install folder instead of your vault (#114).
+
 ## 1.5.0 - October 4, 2026
 
 ### Improvements
