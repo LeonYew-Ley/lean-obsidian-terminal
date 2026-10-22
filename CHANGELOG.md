@@ -2,6 +2,15 @@
 
 All notable changes to Lean Obsidian Terminal are documented here.
 
+## 1.6.0 - October 22, 2026
+
+### Improvements
+
+- docs: regenerate CHANGELOG for 1.5.0
+- ci: run changelog workflow when the Release workflow completes
+- Release prep: OSC 52 clipboard writes, scoped CSS, empty cwd fix
+- Release 1.6.0
+
 ## 1.5.0 - October 4, 2026
 
 ### Improvements
