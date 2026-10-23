@@ -1146,11 +1146,11 @@ export class TerminalTabManager {
     this.requestSaveLayout?.();
   }
 
-  fitActive(): void {
+  fitActive(forceRedraw = false): void {
     const active = this.getActiveSession();
     if (!active) return;
     try {
-      fitTerminalSession(active);
+      fitTerminalSession(active, forceRedraw);
     } catch {
       // ignore
     }

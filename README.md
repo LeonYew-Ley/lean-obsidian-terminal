@@ -24,6 +24,7 @@ An embedded terminal panel for [Obsidian](https://obsidian.md), powered by [xter
 - Clipboard support: Ctrl+V / Cmd+V paste, Ctrl+C / Cmd+C copy (with selection)
 - Clickable URLs in terminal output
 - Auto-resize as the panel resizes or moves; floating status bars no longer cover the last terminal row
+- **Refresh terminal layout (keep session)** command to redraw a stale display without sending Ctrl+C or restarting the shell
 - Shift+Enter inserts a newline without submitting (muscle memory for Claude Code users)
 - Readline shortcuts: Ctrl+K (kill to end), Ctrl+U (kill to start), Ctrl+W (kill word), Ctrl+E (end of line), Ctrl+L (clear screen) - toggle under Settings > Behavior > Readline shortcuts
 - The **Open terminal** command focuses an already-open terminal pane instead of only revealing it, so keyboard input lands in the shell immediately

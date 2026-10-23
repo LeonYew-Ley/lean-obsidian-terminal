@@ -17,14 +17,25 @@ export function getStatusBarInset(container: DOMRect, status: DOMRect | null): n
   return Math.ceil(Math.min(container.height, container.bottom - status.top));
 }
 
-/** Refit and repaint without sending input or replacing the running PTY. */
-export function fitTerminalSession(session: LayoutSession): void {
+/** Refit and repaint without sending input or replacing the running PTY.
+ *  forceRedraw briefly widens the PTY by one column so the application redraws.
+ */
+export function fitTerminalSession(session: LayoutSession, forceRedraw = false): void {
   const { containerEl, terminal, fitAddon, pty } = session;
   const rect = containerEl.getBoundingClientRect();
   // Detached/hidden panes briefly report zero dimensions while being moved.
   if (!containerEl.isConnected || rect.width <= 0 || rect.height <= 0) return;
   fitAddon.fit();
   const { cols, rows } = terminal;
-  pty.resize(cols, rows);
+  // The width bump and the restore are synchronous, and the fitted size is
+  // restored in finally, so a resize cannot run between them. A resize already
+  // queued — or one that arrives while the application is still painting —
+  // runs afterward and fits the PTY to the container's current size, so the
+  // temporary width does not stick.
+  try {
+    if (forceRedraw) pty.resize(cols + 1, rows);
+  } finally {
+    pty.resize(cols, rows);
+  }
   terminal.refresh(0, rows - 1);
 }

@@ -63,4 +63,11 @@ describe("terminal moving and repainting", () => {
     expect(s.terminal.refresh).toHaveBeenCalledWith(0, 49);
     expect(s.pty.resize).toHaveBeenCalledWith(71, 50);
   });
+  it("requests an application repaint without sending Ctrl+C or replacing the process", () => {
+    const s = session();
+    fitTerminalSession(s, true);
+    expect(s.pty.resize.mock.calls).toEqual([[72, 50], [71, 50]]);
+    expect(s.pty.write).not.toHaveBeenCalled();
+    expect(s.pty.kill).not.toHaveBeenCalled();
+  });
 });

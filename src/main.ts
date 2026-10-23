@@ -134,6 +134,12 @@ export default class TerminalPlugin extends Plugin {
       callback: () => void refreshClaudeRegistry(this),
     });
 
+    this.addCommand({
+      id: "refresh-terminal-layout",
+      name: "Refresh terminal layout (keep session)",
+      callback: () => this.getActiveTabManager()?.fitActive(true),
+    });
+
     // Tab navigation commands
     this.addCommand({
       id: "next-terminal-tab",
